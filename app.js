@@ -28,7 +28,7 @@ oplog.on('op', function(data) {
 });
 
 oplog.on('insert', function(doc) {
-	var _id = doc.o._id.toString();
+	var _id = doc.o2._id.toString();
 	var clonedDoc = _.clone(doc.o)
 	delete clonedDoc._id;
 
@@ -49,17 +49,31 @@ oplog.on('insert', function(doc) {
 
 oplog.on('update', function(doc) {
 	console.log(doc);
-	var _id = doc.o._id.toString();
-	var clonedDoc = _.clone(doc.o)
-	delete clonedDoc._id;
+
+	var _id = doc.o2._id.toString();
+
+	var orgDoc = doc.o;
+	var body;
+
+	if (orgDoc[$set]) {
+		//set single property using partial document
+		body = orgDoc[$set];
+
+	} else {
+		//update whole doc
+		var clonedDoc = _.clone(doc.o)
+		delete clonedDoc._id;
+		body = {
+			doc: clonedDoc
+		}
+	}
+
 
 	client.update({
 		index: 'project-index',
 		type: 'project',
 		id: _id,
-		body: {
-			doc: clonedDoc
-		}
+		body:
 	}, function(error, response) {
 		counter++;
 		console.log('Document updated ' + _id);
@@ -69,7 +83,7 @@ oplog.on('update', function(doc) {
 });
 
 oplog.on('delete', function(doc) {
-	var _id = doc.o._id.toString();
+	var _id = doc.o2._id.toString();
 
 	client.delete({
 		index: 'project-index',
