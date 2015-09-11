@@ -48,7 +48,7 @@ oplog.on('insert', function(doc) {
 });
 
 oplog.on('update', function(doc) {
-
+	console.log(doc);
 	var _id = doc.o._id.toString();
 	var clonedDoc = _.clone(doc.o)
 	delete clonedDoc._id;
