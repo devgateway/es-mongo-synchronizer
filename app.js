@@ -36,8 +36,8 @@ oplog.on('insert', function(doc) {
 		index: 'project-index',
 		type: 'project',
 		id: _id,
-		body:  clonedDoc
-		
+		body: clonedDoc
+
 	}, function(error, response) {
 		counter++;
 		console.log('Document indexed ' + _id);
@@ -52,8 +52,6 @@ oplog.on('update', function(doc) {
 
 
 	var _id = doc.o2._id.toString();
-	console.log(_id);
-
 
 	if (doc.o['$set']) { //SET VALUE
 
@@ -65,7 +63,6 @@ oplog.on('update', function(doc) {
 		});
 
 		console.log('$set fields recevied ');
-		console.log(JSON.stringify(body));
 
 		client.update({
 			index: 'project-index',
@@ -87,7 +84,6 @@ oplog.on('update', function(doc) {
 		console.log('$unset fields');
 		var partial = doc.o['$unset'];
 		var fields = _.keys(partial);
-		console.log(fields);
 		client.update({
 			index: 'project-index',
 			type: 'project',
@@ -133,7 +129,9 @@ oplog.on('update', function(doc) {
 });
 
 oplog.on('delete', function(doc) {
-	var _id = doc.o2._id.toString();
+	var _id = doc.o._id.toString();
+
+	console.log('Delete document ' + _id);
 
 	client.delete({
 		index: 'project-index',
