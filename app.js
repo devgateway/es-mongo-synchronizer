@@ -1,15 +1,17 @@
 var _ = require('lodash')
-var MongoOplog = require('mongo-oplog');
-var oplog = MongoOplog('mongodb://127.0.0.1:27017/local', {
-	ns: 'aiddata.project'
-}).tail();
 
+var MongoOplog = require('mongo-oplog');
+var conf = require('./conf.java');
 var elasticsearch = require('elasticsearch');
+
 var counter = 0;
 
+var oplog = MongoOplog('mongodb:' + conf.db, {
+	ns: conf.ns
+}).tail();
 var client = new elasticsearch.Client({
-	host: 'localhost:9200',
-	log: 'info'
+	host: conf.es,
+	log: conf.log
 });
 
 client.ping({
@@ -24,140 +26,150 @@ client.ping({
 });
 
 
-function count(){
-	counter++;
-	console.log(counter);
-}
+
+/**
+ * [parse_id from oplog document]
+ * @param  {[type]} doc [description]
+ * @return {[type]}     [description]
+ */
+ function parse_id(doc) {
+ 	return doc.o2 ? doc.o2._id.toString() : doc.o._id.toString();
+ }
+
+/**
+ * Handles ES response
+ * @param  {[type]} action   [description]
+ * @param  {[type]} _id      [description]
+ * @param  {[type]} error    [description]
+ * @param  {[type]} response [description]
+ * @return {[type]}          [description]
+ */
+ function handleResponse(action, _id, error, response) {
+ 	if (error) {
+ 		if (error.status == 404) {
+ 			console.log('ERROR: document not found on elastic search: ' + _id);
+ 		} else {
+ 			console.log(error)
+ 		}
+ 	} else {
+ 		counter++;
+ 		console.log(action + ' - ' + ' - ' + _id + ' - ' + counter);
+
+ 	}
+ }
+
+/**
+ * Index document 
+ * @param  {[type]} _id [description]
+ * @param  {[type]} o   [description]
+ * @return {[type]}     [description]
+ */
+ function index(_id, o) {
+ 	client.index(
+ 		_.assign({
+ 			id: _id,
+ 			body: o
+ 		}, conf.type),
+ 		function(error, response) {
+ 			handleResponse('insert', _id, error, response);
+ 		});
+ }
+
+/**
+ * Set document properties
+ * @param {[type]} _id [description]
+ * @param {[type]} o   [description]
+ */
+ function set(_id, o) {
+ 	var partial = o['$set'];
+ 	var body = {};
+ 	_.mapKeys(partial, function(value, key) {
+ 		_.set(body, key, value)
+ 	});
+ 	client.update(_.assign({
+ 		id: _id,
+ 		body: {
+ 			doc: body
+ 		}
+ 	},
+ 	conf.type),
+ 	function(error, response) {
+ 		handleResponse('set', _id, error, response);
+ 	}
+ 	);
+
+ }
 
 
-oplog.on('op', function(data) {
+/**
+ * unset document properties
+ * @type {[type]}
+ */
+ function unset(_id, o) {
+ 	var partial = o['$unset'];
+ 	var fields = _.keys(partial);
+ 	client.update(_.assign({
+ 		id: _id,
+ 		body: {
+ 			"script": "for(i=0; i < fields.size();i++){	ctx._source.remove(fields.get(i))}",
+ 			"params": {
+ 				"fields": fields
+ 			}
+ 		}
+ 	},
+ 	conf.type),
+ 	function(error, response) {
+ 		handleResponse('unset', _id, error, response);
+ 	});
+ }
+
+
+/**
+ * Delte document from index
+ * @param  {[type]} _id [description]
+ * @return {[type]}     [description]
+ */
+ function remove(_id) {
+ 	client.delete(_.assign({
+ 		id: _id,
+ 	}, conf.type), function(error, response) {
+ 		handleResponse('remove', _id, error, response);
+ 	})
+ }
+
+ oplog.on('op', function(data) {
 	//console.log(data);
 });
 
-oplog.on('insert', function(doc) {
-	var _id = doc.o._id.toString();
-	var clonedDoc = _.clone(doc.o)
-	delete clonedDoc._id;
-
-	client.index({
-		index: 'project-index',
-		type: 'project',
-		id: _id,
-		body: clonedDoc
-
-	}, function(error, response) {
-		count();
-		console.log('Document indexed ' + _id);
-		if (error)
-			console.log(error);
-	})
-});
+ oplog.on('insert', function(doc) {
+ 	index(parse_id(doc), doc.o);
+ });
 
 
-
-
-/*Handle Updates*/
-oplog.on('update', function(doc) {
-	var _id = doc.o2._id.toString();
-
+ /*Handle Updates*/
+ oplog.on('update', function(doc) {
 	if (doc.o['$set']) { //SET VALUE
-
-		var partial = doc.o['$set'];
-		var body = {};
-
-		_.mapKeys(partial, function(value, key) {
-			_.set(body, key, value)
-		});
-
-		console.log('$set fields recevied ');
-
-		client.update({
-			index: 'project-index',
-			type: 'project',
-			id: _id,
-			body: {
-				doc: body
-			}
-		}, function(error, response) {
-			count();
-			console.log('Document updated ' + _id);
-			if (error)
-				console.log(error);
-		})
-
+		set(parse_id(doc), doc.o);
 	} else if (doc.o['$unset']) { //UNSET VALUE
-		console.log('$unset fields');
-		var partial = doc.o['$unset'];
-		var fields = _.keys(partial);
-		client.update({
-			index: 'project-index',
-			type: 'project',
-			id: _id,
-			body: {
-				"script": "for(i=0; i < fields.size();i++){	ctx._source.remove(fields.get(i))}",
-				"params": {
-					"fields": fields
-				}
-			}
-		}, function(error, response) {
-			count();
-			console.log('Document updated ' + _id);
-			if (error)
-				console.log(error);
-		})
-
-
+		unset(parse_id(doc), doc.o);
 	} else {
-		console.log('Full update');
-		var partial = doc.o;
-		var clonedDoc = _.clone(doc.o)
-		delete clonedDoc._id;
-		client.update({
-			index: 'project-index',
-			type: 'project',
-			id: _id,
-			body: {
-				doc: clonedDoc
-
-			}
-		}, function(error, response) {
-			count();
-			console.log('Document updated ' + _id);
-			if (error)
-				console.log(error);
-		})
-
+		index(parse_id(doc), doc.o);
 	}
 
 });
 
-oplog.on('delete', function(doc) {
-	var _id = doc.o._id.toString();
+ oplog.on('delete', function(doc) {
+ 	remove(parse_id(doc));
+ });
 
-	console.log('Delete document ' + _id);
+ oplog.on('error', function(error) {
+ 	console.log(error);
+ });
 
-	client.delete({
-		index: 'project-index',
-		type: 'project',
-		id: _id,
+ oplog.on('end', function() {
+ 	console.log('nothing more to do');
+ });
 
-	}, function(error, response) {
-		count();
-		console.log('Document deleted ' + _id);
-		if (error)
-			console.log(error);
-	})
-
-});
-
-oplog.on('error', function(error) {
-	console.log(error);
-});
-
-oplog.on('end', function() {
-	console.log('nothing more to do');
-});
-
-oplog.stop(function() {
-	console.log('Stopping');
-});
+ oplog.stop(function() {
+ 	console.log('Stopping');
+ });
