@@ -23,6 +23,13 @@ client.ping({
 	}
 });
 
+
+function count(){
+	counter++;
+	console.log(counter);
+}
+
+
 oplog.on('op', function(data) {
 	//console.log(data);
 });
@@ -39,7 +46,7 @@ oplog.on('insert', function(doc) {
 		body: clonedDoc
 
 	}, function(error, response) {
-		counter++;
+		count();
 		console.log('Document indexed ' + _id);
 		if (error)
 			console.log(error);
@@ -47,10 +54,10 @@ oplog.on('insert', function(doc) {
 });
 
 
+
+
 /*Handle Updates*/
 oplog.on('update', function(doc) {
-
-
 	var _id = doc.o2._id.toString();
 
 	if (doc.o['$set']) { //SET VALUE
@@ -72,13 +79,11 @@ oplog.on('update', function(doc) {
 				doc: body
 			}
 		}, function(error, response) {
-			counter++;
+			count();
 			console.log('Document updated ' + _id);
 			if (error)
 				console.log(error);
 		})
-
-
 
 	} else if (doc.o['$unset']) { //UNSET VALUE
 		console.log('$unset fields');
@@ -95,7 +100,7 @@ oplog.on('update', function(doc) {
 				}
 			}
 		}, function(error, response) {
-			counter++;
+			count();
 			console.log('Document updated ' + _id);
 			if (error)
 				console.log(error);
@@ -107,8 +112,6 @@ oplog.on('update', function(doc) {
 		var partial = doc.o;
 		var clonedDoc = _.clone(doc.o)
 		delete clonedDoc._id;
-
-
 		client.update({
 			index: 'project-index',
 			type: 'project',
@@ -118,7 +121,7 @@ oplog.on('update', function(doc) {
 
 			}
 		}, function(error, response) {
-			counter++;
+			count();
 			console.log('Document updated ' + _id);
 			if (error)
 				console.log(error);
@@ -139,7 +142,7 @@ oplog.on('delete', function(doc) {
 		id: _id,
 
 	}, function(error, response) {
-		counter++;
+		count();
 		console.log('Document deleted ' + _id);
 		if (error)
 			console.log(error);
