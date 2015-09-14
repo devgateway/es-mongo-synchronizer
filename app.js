@@ -47,39 +47,87 @@ oplog.on('insert', function(doc) {
 	})
 });
 
+
+/*Handle Updates*/
 oplog.on('update', function(doc) {
-	console.log(doc);
+
 
 	var _id = doc.o2._id.toString();
+	console.log(_id);
 
-	var orgDoc = doc.o;
-	var body;
 
-	if (orgDoc['$set']) {
-		//set single property using partial document
-		body = _orgDoc['$set'];
+	if (doc.o['$set']) { //SET VALUE
+
+		var partial = doc.o['$set'];
+		var body = {};
+
+		_.mapKeys(partial, function(value, key) {
+			_.set(body, key, value)
+		});
+
+		console.log('$set fields recevied ');
+		console.log(JSON.stringify(body));
+
+		client.update({
+			index: 'project-index',
+			type: 'project',
+			id: _id,
+			body: {
+				doc: body
+			}
+		}, function(error, response) {
+			counter++;
+			console.log('Document updated ' + _id);
+			if (error)
+				console.log(error);
+		})
+
+
+
+	} else if (doc.o['$unset']) { //UNSET VALUE
+		console.log('$Unset fields received');
+		var partial = doc.o['$unset'];
+		var fields = _.keys(partial);
+		console.log(fields);
+		client.update({
+			index: 'project-index',
+			type: 'project',
+			id: _id,
+			body: {
+				"script": "for(i=0; i < fields.size();i++){	ctx._source.remove(fields.get(i))}",
+				"params": {
+					"fields": fields
+				}
+			}
+		}, function(error, response) {
+			counter++;
+			console.log('Document updated ' + _id);
+			if (error)
+				console.log(error);
+		})
+
 
 	} else {
-		//update whole doc
-		var clonedDoc = _.clone(doc.o)
-		delete clonedDoc._id;
-		body = {
-			doc: clonedDoc
-		}
+		console.log('Full  update');
+		var partial = doc.o;
+		var body = _.clone({}, doc.o);
+
+		client.update({
+			index: 'project-index',
+			type: 'project',
+			id: _id,
+			body: {
+				doc: body
+			}
+		}, function(error, response) {
+			counter++;
+			console.log('Document updated ' + _id);
+			if (error)
+				console.log(error);
+		})
+
 	}
 
-
-	client.update({
-		index: 'project-index',
-		type: 'project',
-		id: _id,
-		body:body
-	}, function(error, response) {
-		counter++;
-		console.log('Document updated ' + _id);
-		if (error)
-			console.log(error);
-	})
 });
 
 oplog.on('delete', function(doc) {
