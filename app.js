@@ -231,7 +231,8 @@
  		if (target._parent) {
  			if (doc[target._parent]) {
  				_.assign(target, {
- 					'routing': doc[target._parent].oid.toString()
+ 					'routing': doc[target._parent].oid.toString(),
+ 					'parent': doc[target._parent].oid.toString()
  				})
  			}
  		}
