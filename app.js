@@ -26,7 +26,6 @@
    ttl: false, // ttl* [NEW], can be true for 24h default or a number in MILLISECONDS
  });
 
-
  var counter = 0;
  console.log('last ts is: ' + storage.getItem('ts'));
  //   since: storage.getItem('ts')
@@ -87,11 +86,12 @@
   * @return {[type]}          [description]
   */
  function handleResponse(ns, action, _id, error, response) {
+   active_request--;
    if (error) {
-     logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + _id);
+     logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + _id + ' active:' + active_request);
    } else {
      counter++;
-     logWithDate(ns + ' - ' + action + ' - ' + ' - ' + _id + ' - ' + counter);
+     logWithDate(ns + ' - ' + action + ' - ' + ' - ' + _id + ' - ' + counter + ' active:' + active_request);
    }
  }
 
@@ -104,14 +104,20 @@
   * @return {[type]}        [description]
   */
  function index(ns, target, _id, o) {
-   client.index(
-     _.assign({
-       id: _id,
-       body: o
-     }, target, conf.options),
-     function(error, response) {
-       handleResponse(ns, 'insert', _id, error, response);
-     });
+
+   return new Promise(function(resolve, reject) {
+     active_request++;
+     client.index(
+       _.assign({
+         id: _id,
+         body: o
+       }, target, conf.options),
+       function(error, response) {
+         handleResponse(ns, 'insert', _id, error, response);
+         resolve();
+       });
+
+   });
  }
 
 
@@ -132,62 +138,50 @@
   * @param {[type]} o      [description]
   */
  function set(ns, target, _id, o) {
+   return new Promise(function(resolve, reject) {
 
-  if (this._current_id==_id){
-    console.log('......................warning possible concurrent update !......................')
-  }
-    this._current_id=_id;
-
-   /*Call set once we checked if routing is needed*/
-   var setFunction = function(_target) {
-     var partial = o['$set'];
-     var body = {};
-     target = target || _target;
-     _.mapKeys(partial, function(value, key) {
-       _.set(body, key, value)
-     });
-
-
-
-     client.update(_.assign({
-           id: _id,
-           body: {
-             doc: body
-           }
-         },
-         target, conf.options),
-       function(error, response) {
-         if (error && error.status == 409) {
-           //As ES api is asynchornic if two updates to the same document are requested at the same time and therer are versioning issues elastic seearch will return a 409 
-           //TODO://find a better way for concurrency control 
-           logWithDate('Got 409 document will be indexed from databse in 2 minutes - ' + _id + ' error ' + response.error);
-           setTimeout(function() {
-             indexDocumentFromDb(ns, target, _id);
-           }, 2 * 60 * 100)
-
-         } else if (error && error.status == 404) {
-           logWithDate('Got 404 - ' + _id);
-           indexDocumentFromDb(ns, target, _id);
-         } else {
-           handleResponse(ns, 'set', _id, error, response);
-         }
-       }
-     );
-
-   };
-
-
-   if (target._parent && !target.routing) { //if routing is not present I should get the routing from the orginal document
-     var document = getOriginalDocument(ns, _id).then(
-       function(doc) {
-         var _target = getTarget(ns, doc);
-         logWithDate('Got target, calling set function now');
-         setFunction(_target); //call update after setting routing ;
+     /*Call set once we checked if routing is needed*/
+     var setFunction = function(_target) {
+       active_request++;
+       var partial = o['$set'];
+       var body = {};
+       target = target || _target;
+       _.mapKeys(partial, function(value, key) {
+         _.set(body, key, value)
        });
-   } else {
-     setFunction(); //routing is not needed or already set;
-   }
+       client.update(_.assign({
+             id: _id,
+             body: {
+               doc: body
+             }
+           },
+           target, conf.options),
+         function(error, response) {
+           if (error && error.status == 409) {
+             logWithDate('WArning got 409 document may not be updated propertly');
+           } else if (error && error.status == 404) {
+             logWithDate('Got 404 - ' + _id);
+             indexDocumentFromDb(ns, target, _id);
+           } else {
+             handleResponse(ns, 'set', _id, error, response);
+           }
+           resolve(); //resolve promise
+         }
+       );
+     };
 
+     if (target._parent && !target.routing) { //if routing is not present I should get the routing from the orginal document
+       var document = getOriginalDocument(ns, _id).then(
+         function(doc) {
+           var _target = getTarget(ns, doc);
+           logWithDate('Got target, calling set function now');
+           setFunction(_target); //call update after setting routing ;
+         });
+     } else {
+       setFunction(); //routing is not needed or already set;
+     }
+
+   });
 
  }
 
@@ -201,41 +195,47 @@
   * @return {[type]}        [description]
   */
  function unset(ns, target, _id, o) {
-   var unSetFunction = function() {
-     var partial = o['$unset'];
-     var fields = _.keys(partial);
-     client.update(_.assign({
-           id: _id,
-           body: {
-             "script": "for(i=0; i < fields.size();i++){	ctx._source.remove(fields.get(i))}",
-             "params": {
-               "fields": fields
+   return new Promise(function(resolve, reject) {
+     var unSetFunction = function() {
+
+       active_request++;
+
+       var partial = o['$unset'];
+       var fields = _.keys(partial);
+       client.update(_.assign({
+             id: _id,
+             body: {
+               "script": "for(i=0; i < fields.size();i++){	ctx._source.remove(fields.get(i))}",
+               "params": {
+                 "fields": fields
+               }
              }
+           },
+           target, conf.options),
+         function(error, response) {
+           if (error && error.status == 404) {
+             logWithDate('Got 404 - ' + _id);
+             indexDocumentFromDb(ns, target, _id);
+           } else {
+             handleResponse(ns, 'unset', _id, error, response);
            }
-         },
-         target, conf.options),
-       function(error, response) {
-         if (error && error.status == 404) {
-           logWithDate('Got 404 - ' + _id);
-           indexDocumentFromDb(ns, target, _id);
-         } else {
-           handleResponse(ns, 'unset', _id, error, response);
-         }
-       });
-   }
+
+           resolve(); //resolve promise
+         });
+     }
 
 
-   if (target._parent && !target.routing) { //if routing is not present I should get the routing from the orginal document
-     var document = getOriginalDocument(ns, _id).then(
-       function(doc) {
-         logWithDate('Got target, calling unset function now');
-         var _target = getTarget(ns, doc);
-         unSetFunction(_target); //call update after setting routing ;
-       });
-   } else {
-     unSetFunction(); //routing is not needed or already set;
-   }
-
+     if (target._parent && !target.routing) { //if routing is not present I should get the routing from the orginal document
+       var document = getOriginalDocument(ns, _id).then(
+         function(doc) {
+           logWithDate('Got target, calling unset function now');
+           var _target = getTarget(ns, doc);
+           unSetFunction(_target); //call update after setting routing ;
+         });
+     } else {
+       unSetFunction(); //routing is not needed or already set;
+     }
+   });
  }
 
 
@@ -247,10 +247,13 @@
   * @return {[type]}        [description]
   */
  function remove(ns, target, _id) {
-   client.delete(_.assign({
-     id: _id,
-   }, target, conf.options), function(error, response) {
-     handleResponse(ns, 'remove', _id, error, response);
+   return new Promise(function(resolve, reject) {
+     client.delete(_.assign({
+       id: _id,
+     }, target, conf.options), function(error, response) {
+       handleResponse(ns, 'remove', _id, error, response);
+       resolve(); //resolve promise
+     })
    })
  }
 
@@ -262,7 +265,6 @@
   * @return {[type]}          [description]
   */
  function getTarget(ns, doc) {
-   debugger;
    var target = conf.ns_mapping[ns];
    if (target) {
 
@@ -313,39 +315,81 @@
 
  }
 
+
+ var max_active_request = 100;
+ var active_request = 0;
+
+ function setTs(ts) {
+  // console.log('savig ts' + ts);
+   storage.setItem('ts', ts);
+
+ }
+
+ function doInsert(doc) {
+
+   if (max_active_request > active_request) {
+     setTs(doc.ts);
+     var target = getTarget(doc.ns, doc.o);
+     if (target) {
+       index(doc.ns, target, parse_id(doc), doc.o).then(function() {
+
+       });
+     }
+   } else {
+     setTimeout(function() {
+       doInsert(doc)
+     }, 0)
+   }
+ }
+
+ function doUpdate(doc) {
+   if (max_active_request > active_request) {
+     setTs(doc.ts);
+
+     var target = getTarget(doc.ns, doc.o);
+     if (target) {
+       if (doc.o['$set']) { //SET VALUE
+         set(doc.ns, target, parse_id(doc), doc.o).then(function() {
+
+         });
+       } else if (doc.o['$unset']) { //UNSET VALUE
+         unset(doc.ns, target, parse_id(doc), doc.o).then(function() {
+           setTs(doc.ts)
+         });
+       } else {
+         index(doc.ns, target, parse_id(doc), doc.o).then(function() {
+           setTs(doc.ts)
+         });
+       }
+     } else {
+       logWithDate('nothing to do with ' + doc.ns);
+     }
+   } else {
+     //console.log('delaying request')
+     setTimeout(function() {
+       doUpdate(doc)
+     }, 0)
+   }
+ }
+
  oplog.on('op', function(data) {
-   debugger;
-   storage.setItem('ts', data.ts);
-   logWithDate('Last records ' + data.ns + '- ts ' + data.ts);
+
+   //logWithDate('Last ts id' + data.ns + '- ts ' + data.ts);
  });
+
 
  oplog.on('insert', function(doc) {
-   var target = getTarget(doc.ns, doc.o);
-   if (target) {
-     index(doc.ns, target, parse_id(doc), doc.o);
-   }
+   doInsert(doc);
  });
-
 
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
-   var target = getTarget(doc.ns, doc.o);
-   if (target) {
-     if (doc.o['$set']) { //SET VALUE
-       set(doc.ns, target, parse_id(doc), doc.o);
-     } else if (doc.o['$unset']) { //UNSET VALUE
-       unset(doc.ns, target, parse_id(doc), doc.o);
-     } else {
-       index(doc.ns, target, parse_id(doc), doc.o);
-     }
-   } else {
-     logWithDate('nothing to do with ' + doc.ns);
-   }
-
+   doUpdate(doc);
  });
 
  oplog.on('delete', function(doc) {
+
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      remove(doc.ns, target, parse_id(doc));
