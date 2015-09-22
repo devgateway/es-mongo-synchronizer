@@ -22,7 +22,8 @@ module.exports = {
 		},
 	},
 	'options': {
-		'retryOnConflict': 2
+		'retryOnConflict': 10,
+
 	}
 
 };
