@@ -13,13 +13,23 @@ module.exports = {
 		'aiddata.location': {
 			'index': 'project-index',
 			'type': 'locations', //keep an eye location(s) type name is in plural,
-			'_parent':'loc_parent'
+			'_parent': 'loc_parent'
 		},
 
 		'aiddata.contribution': {
 			'index': 'project-index',
 			'type': 'contribution',
 		},
+
+		'gfdrr.project': {
+			'index': 'gfdrr-project-index',
+			'type': 'project',
+		},
+		'gfdrr.location': {
+			'index': 'gfdrr-project-index',
+			'type': 'locations', //keep an eye location(s) type name is in plural,
+			'_parent': 'loc_parent'
+		}
 	},
 	'options': {
 		'retryOnConflict': 10,
