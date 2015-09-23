@@ -338,7 +338,7 @@
    } else {
      setTimeout(function() {
        doInsert(doc)
-     }, 0)
+     }, 100)
    }
  }
 
@@ -368,7 +368,7 @@
      //console.log('delaying request')
      setTimeout(function() {
        doUpdate(doc)
-     }, 0)
+     }, 100)
    }
  }
 

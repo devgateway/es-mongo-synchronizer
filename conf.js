@@ -3,8 +3,7 @@ module.exports = {
 	"oplog_db": "//127.0.0.1:27017/local",
 	"es": "localhost:9200",
 	'log': 'info',
-	'max_active_request':25, //how many request to elastic search can be active ,
-	 'requestTimeout': 60000,
+	'max_active_request': 5, //how many request to elastic search can be active ,
 	/*namespace should be database.collection*/
 	'ns_mapping': {
 		'aiddata.project': {
@@ -35,7 +34,7 @@ module.exports = {
 	},
 	'options': {
 		'retryOnConflict': 10,
-
+		'requestTimeout': 60000,
 	}
 
 };
