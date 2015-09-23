@@ -316,7 +316,7 @@
  }
 
 
- var max_active_request = 100;
+ var max_active_request = conf.max_active_request;
  var active_request = 0;
 
  function setTs(ts) {
