@@ -162,7 +162,7 @@
              logWithDate('WArning got 409 document may not be updated propertly');
            } else if (error && error.status == 404) {
              logWithDate('Got 404 - ' + _id);
-            //TODO add to queue
+             //TODO add to queue
              indexDocumentFromDb(ns, target, _id);
            } else {
              handleResponse(ns, 'set', _id, error, response);
@@ -236,7 +236,7 @@
      }
    });
  }
- 
+
 
 
  /**
@@ -319,12 +319,17 @@
 
  //elastic search changes will be called syncrhonically 
  function addToQueue(fn) {
-   var job = function(task) {
-     fn().then(function() {
-       task.done();
-     })
+   if (conf.useQueue) {
+     var job = function(task) {
+       fn().then(function() {
+         task.done();
+       })
+     }
+     queue.push(job);
+
+   }else{
+      fn();
    }
-   queue.push(job);
  }
 
 

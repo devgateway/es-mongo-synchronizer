@@ -3,6 +3,7 @@ module.exports = {
 	"oplog_db": "//127.0.0.1:27017/local",
 	"es": "localhost:9200",
 	'log': 'info',
+	'useQueue':false,
 	'max_active_request': 5, //how many request to elastic search can be active ,
 	/*namespace should be database.collection*/
 	'ns_mapping': {
