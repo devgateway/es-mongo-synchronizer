@@ -12,9 +12,15 @@
    MongoClient = require('mongodb').MongoClient,
    MongoOplog = require('mongo-oplog'),
    conf = require('./conf.js'),
+   seqqueue = require('seq-queue'),
    elasticsearch = require('elasticsearch');
 
  var storage = require('node-persist');
+
+ var queue = seqqueue.createQueue(1000);
+
+
+
  storage.initSync({
    dir: __dirname + '/store',
    stringify: JSON.stringify,
@@ -86,12 +92,11 @@
   * @return {[type]}          [description]
   */
  function handleResponse(ns, action, _id, error, response) {
-   active_request--;
    if (error) {
-     logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + _id + ' active:' + active_request);
+     logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + _id);
    } else {
      counter++;
-     logWithDate(ns + ' - ' + action + ' - ' + ' - ' + _id + ' - ' + counter + ' active:' + active_request);
+     logWithDate(ns + ' - ' + action + ' - ' + ' - ' + _id + ' - ' + counter);
    }
  }
 
@@ -104,9 +109,8 @@
   * @return {[type]}        [description]
   */
  function index(ns, target, _id, o) {
-
+   console.log('return index promise');
    return new Promise(function(resolve, reject) {
-     active_request++;
      client.index(
        _.assign({
          id: _id,
@@ -139,10 +143,7 @@
   */
  function set(ns, target, _id, o) {
    return new Promise(function(resolve, reject) {
-
-     /*Call set once we checked if routing is needed*/
      var setFunction = function(_target) {
-       active_request++;
        var partial = o['$set'];
        var body = {};
        target = target || _target;
@@ -161,6 +162,7 @@
              logWithDate('WArning got 409 document may not be updated propertly');
            } else if (error && error.status == 404) {
              logWithDate('Got 404 - ' + _id);
+            //TODO add to queue
              indexDocumentFromDb(ns, target, _id);
            } else {
              handleResponse(ns, 'set', _id, error, response);
@@ -197,9 +199,6 @@
  function unset(ns, target, _id, o) {
    return new Promise(function(resolve, reject) {
      var unSetFunction = function() {
-
-       active_request++;
-
        var partial = o['$unset'];
        var fields = _.keys(partial);
        client.update(_.assign({
@@ -237,6 +236,7 @@
      }
    });
  }
+ 
 
 
  /**
@@ -316,87 +316,76 @@
  }
 
 
- var max_active_request = conf.max_active_request;
- var active_request = 0;
+
+ //elastic search changes will be called syncrhonically 
+ function addToQueue(fn) {
+   var job = function(task) {
+     fn().then(function() {
+       task.done();
+     })
+   }
+   queue.push(job);
+ }
+
 
  function setTs(ts) {
-  // console.log('savig ts' + ts);
    storage.setItem('ts', ts);
-
  }
 
- function doInsert(doc) {
 
-   if (max_active_request > active_request) {
-     setTs(doc.ts);
-     var target = getTarget(doc.ns, doc.o);
-     if (target) {
-       index(doc.ns, target, parse_id(doc), doc.o).then(function() {
-
-       });
-     }
-   } else {
-     setTimeout(function() {
-       doInsert(doc)
-     }, 100)
-   }
- }
-
- function doUpdate(doc) {
-   if (max_active_request > active_request) {
-     setTs(doc.ts);
-
-     var target = getTarget(doc.ns, doc.o);
-     if (target) {
-       if (doc.o['$set']) { //SET VALUE
-         set(doc.ns, target, parse_id(doc), doc.o).then(function() {
-
-         });
-       } else if (doc.o['$unset']) { //UNSET VALUE
-         unset(doc.ns, target, parse_id(doc), doc.o).then(function() {
-           setTs(doc.ts)
-         });
-       } else {
-         index(doc.ns, target, parse_id(doc), doc.o).then(function() {
-           setTs(doc.ts)
-         });
-       }
-     } else {
-       logWithDate('nothing to do with ' + doc.ns);
-     }
-   } else {
-     //console.log('delaying request')
-     setTimeout(function() {
-       doUpdate(doc)
-     }, 100)
-   }
- }
 
  oplog.on('op', function(data) {
-
-   //logWithDate('Last ts id' + data.ns + '- ts ' + data.ts);
+   //   logWithDate('Last ts id' + data.ns + '- ts ' + data.ts);
  });
 
 
  oplog.on('insert', function(doc) {
-   doInsert(doc);
+   var target = getTarget(doc.ns, doc.o);
+   if (target) {
+
+
+   } else {
+     console.log("Wasn't able to get target");
+   }
  });
 
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
-   doUpdate(doc);
- });
-
- oplog.on('delete', function(doc) {
-
    var target = getTarget(doc.ns, doc.o);
    if (target) {
-     remove(doc.ns, target, parse_id(doc));
+     if (doc.o['$set']) { //SET VALUE
+       addToQueue(function() {
+         return set(doc.ns, target, parse_id(doc), doc.o)
+       });
+
+     } else if (doc.o['$unset']) { //UNSET VALUE
+       addToQueue(
+         function() {
+           return unset(doc.ns, target, parse_id(doc), doc.o)
+         })
+
+     } else {
+       addToQueue(function() {
+         return index(doc.ns, target, parse_id(doc), doc.o)
+       });
+     }
+
    } else {
      logWithDate('nothing to do with ' + doc.ns);
    }
+ });
 
+
+ oplog.on('delete', function(doc) {
+   var target = getTarget(doc.ns, doc.o);
+   if (target) {
+     addToQueue(function() {
+       return remove(doc.ns, target, parse_id(doc))
+     });
+   } else {
+     logWithDate('nothing to do with ' + doc.ns);
+   }
  });
 
  oplog.on('error', function(error) {

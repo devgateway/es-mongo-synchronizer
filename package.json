@@ -9,7 +9,8 @@
     "mongo-oplog": "^0.2.1",
     "mongodb": "~2.0.x",
     "node-persist": "0.0.6",
-    "promise": "^7.0.4"
+    "promise": "^7.0.4",
+    "seq-queue": "0.0.5"
   },
   "devDependencies": {},
   "scripts": {

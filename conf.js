@@ -33,8 +33,8 @@ module.exports = {
 		}
 	},
 	'options': {
-		'retryOnConflict': 10,
-		'requestTimeout': 60000,
+		'retryOnConflict': 1,
+
 	}
 
 };
