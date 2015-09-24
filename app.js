@@ -109,15 +109,14 @@
   * @return {[type]}        [description]
   */
  function index(ns, target, _id, o) {
-   console.log('return index promise');
    return new Promise(function(resolve, reject) {
      client.index(
        _.assign({
          id: _id,
-         body: o
+         body: o,
        }, target, conf.options),
        function(error, response) {
-         handleResponse(ns, 'insert', _id, error, response);
+         handleResponse(ns, 'index', _id, error, response);
          resolve();
        });
 
@@ -126,13 +125,35 @@
 
 
 
- function indexDocumentFromDb(ns, target, _id) {
-   getOriginalDocument(ns, _id).then(
-     function(doc) {
-       logWithDate('Indexing from source database');
-       index(ns, target, _id, doc);
-     })
+ function update(ns, target, _id, o) {
+   return new Promise(function(resolve, reject) {
+     client.update(
+       _.assign({
+         id: _id,
+         body: {
+           doc: o
+         },
+         "doc_as_upsert": true
+       }, target, conf.options),
+       function(error, response) {
+         handleResponse(ns, 'update', _id, error, response);
+         resolve();
+       });
 
+   });
+ }
+
+
+ function indexDocumentFromDb(ns, target, _id) {
+   logWithDate('Indexing using mongo record');
+  
+   return new Promise(
+    function(resolve, reject) {
+       getOriginalDocument(ns, _id).then(
+           function(doc) {
+             index(ns, target, _id, doc).then(resolve);
+           })
+     })
  }
  /**
   * [set description]
@@ -142,6 +163,7 @@
   * @param {[type]} o      [description]
   */
  function set(ns, target, _id, o) {
+
    return new Promise(function(resolve, reject) {
      var setFunction = function(_target) {
        var partial = o['$set'];
@@ -150,6 +172,7 @@
        _.mapKeys(partial, function(value, key) {
          _.set(body, key, value)
        });
+
        client.update(_.assign({
              id: _id,
              body: {
@@ -158,16 +181,15 @@
            },
            target, conf.options),
          function(error, response) {
-           if (error && error.status == 409) {
-             logWithDate('WArning got 409 document may not be updated propertly');
-           } else if (error && error.status == 404) {
+           if (error && error.status == 404) {
              logWithDate('Got 404 - ' + _id);
              //TODO add to queue
              indexDocumentFromDb(ns, target, _id);
            } else {
              handleResponse(ns, 'set', _id, error, response);
+
            }
-           resolve(); //resolve promise
+           resolve();
          }
        );
      };
@@ -267,11 +289,10 @@
  function getTarget(ns, doc) {
    var target = conf.ns_mapping[ns];
    if (target) {
-
      if (target._parent) {
        if (doc[target._parent]) {
+         debugger;
          _.assign(target, {
-           'routing': doc[target._parent].oid.toString(),
            'parent': doc[target._parent].oid.toString()
          })
        }
@@ -317,18 +338,21 @@
 
 
 
+
  //elastic search changes will be called syncrhonically 
  function addToQueue(fn) {
    if (conf.useQueue) {
      var job = function(task) {
        fn().then(function() {
+         console.log('Task done.');
          task.done();
        })
-     }
+     }.bind(this);
+     
      queue.push(job);
 
-   }else{
-      fn();
+   } else {
+     fn();
    }
  }
 
@@ -347,13 +371,13 @@
  oplog.on('insert', function(doc) {
    var target = getTarget(doc.ns, doc.o);
    if (target) {
-
-
+     addToQueue(function() {
+       return index(doc.ns, target, parse_id(doc), doc.o)
+     });
    } else {
      console.log("Wasn't able to get target");
    }
  });
-
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
@@ -372,7 +396,7 @@
 
      } else {
        addToQueue(function() {
-         return index(doc.ns, target, parse_id(doc), doc.o)
+         return update(doc.ns, target, parse_id(doc), doc.o)
        });
      }
 

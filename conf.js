@@ -4,7 +4,6 @@ module.exports = {
 	"es": "localhost:9200",
 	'log': 'info',
 	'useQueue':false,
-	'max_active_request': 5, //how many request to elastic search can be active ,
 	/*namespace should be database.collection*/
 	'ns_mapping': {
 		'aiddata.project': {
@@ -34,6 +33,7 @@ module.exports = {
 		}
 	},
 	'options': {
+		'requestTimeout': Infinity,
 		'retryOnConflict': 1,
 
 	}
