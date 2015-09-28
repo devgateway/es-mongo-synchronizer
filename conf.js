@@ -1,9 +1,13 @@
 module.exports = {
 
 	"oplog_db": "//127.0.0.1:27017/local",
+	"mongo": {
+		"host": 'localhost',
+		"port": 27017
+	},
 	"es": "localhost:9200",
 	'log': 'info',
-	'useQueue':false,
+	'useQueue': false,
 	/*namespace should be database.collection*/
 	'ns_mapping': {
 		'aiddata.project': {

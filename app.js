@@ -145,7 +145,7 @@
 
 
  function indexDocumentFromDb(ns, target, _id) {
-   logWithDate('Indexing using mongo record');
+  // logWithDate('Indexing using mongo record');
   
    return new Promise(
     function(resolve, reject) {
@@ -305,8 +305,9 @@
  }
 
  function getOriginalDocument(ns, _id) {
+  logWithDate('Getting document from collection');
    return new Promise(function(resolve, reject) {
-     var server = new Server('localhost', 27017);
+     var server = new Server(conf.mongo.host, conf.mongo.port); //TODO extract url from conf
      var db = ns.split('.')[0];
      var name = ns.split('.')[1];
      var db = new Db(db, server);
