@@ -308,7 +308,6 @@
    //logWithDate('Last ts  readed for ' + data.ns + 'is ' + data.ts);
  });
 
-
  oplog.on('insert', function(doc) {
    //logWithDate('Got insert event');
    var target = getTarget(doc.ns, doc.o);
