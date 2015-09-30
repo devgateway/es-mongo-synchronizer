@@ -307,7 +307,7 @@
 
 
  oplog.on('op', function(data) {
-   logWithDate('Last ts  readed for' + data.ns + 'is ' + data.ts);
+   logWithDate('Last ts  readed for ' + data.ns + 'is ' + data.ts);
  });
 
 
