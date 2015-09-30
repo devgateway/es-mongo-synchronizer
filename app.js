@@ -118,9 +118,7 @@
 
 
  function indexDocumentFromDb(ns, target, _id) {
-
    logWithDate('Indexing Document From DB - Using collection as source');
-
    return new Promise(
      function(resolve, reject) {
        getOriginalDocument(ns, _id).then(
@@ -312,7 +310,7 @@
 
 
  oplog.on('insert', function(doc) {
-   logWithDate('Got insert event');
+   //logWithDate('Got insert event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      addToQueue(function() {
@@ -325,8 +323,7 @@
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
-   logWithDate('Got update event');
-
+   //logWithDate('Got update event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      if (doc.o['$set']) { //SET VALUE
@@ -353,8 +350,7 @@
 
 
  oplog.on('delete', function(doc) {
-   logWithDate('Got delete event');
-
+   //logWithDate('Got delete event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      addToQueue(function() {
