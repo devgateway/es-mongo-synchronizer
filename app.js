@@ -16,10 +16,7 @@
    elasticsearch = require('elasticsearch');
 
  var storage = require('node-persist');
-
  var queue = seqqueue.createQueue(1000);
-
-
 
  storage.initSync({
    dir: __dirname + '/store',
@@ -34,9 +31,10 @@
 
  var counter = 0;
  console.log('last ts is: ' + storage.getItem('ts'));
- //   since: storage.getItem('ts')
+
  var Timestamp = require('mongodb').Timestamp;
  var ts;
+
  if (storage.getItem('ts')) {
    ts = Timestamp.fromString(storage.getItem('ts'));
  }
@@ -52,7 +50,6 @@
    log: conf.log
  });
 
-
  //Check if ES is running
  client.ping({
    requestTimeout: Infinity,
@@ -66,31 +63,16 @@
  });
 
 
-
- /**
-  * [parse_id description]
-  * @param  {[type]} doc [description]
-  * @return {[type]}     [description]
-  */
  function parse_id(doc) {
    return doc.o2 ? doc.o2._id.toString() : doc.o._id.toString();
  }
-
 
 
  function logWithDate(message) {
    console.log((new Date().toISOString()) + '=>' + message);
  }
 
- /**
-  * [handleResponse description]
-  * @param  {[type]} ns       [description]
-  * @param  {[type]} action   [description]
-  * @param  {[type]} _id      [description]
-  * @param  {[type]} error    [description]
-  * @param  {[type]} response [description]
-  * @return {[type]}          [description]
-  */
+
  function handleResponse(ns, action, _id, error, response) {
    if (error) {
      logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + _id);
@@ -100,14 +82,6 @@
    }
  }
 
- /**
-  * [index description]
-  * @param  {[type]} ns     [description]
-  * @param  {[type]} target [description]
-  * @param  {[type]} _id    [description]
-  * @param  {[type]} o      [description]
-  * @return {[type]}        [description]
-  */
  function index(ns, target, _id, o) {
    return new Promise(function(resolve, reject) {
      client.index(
@@ -122,7 +96,6 @@
 
    });
  }
-
 
 
  function update(ns, target, _id, o) {
@@ -145,25 +118,21 @@
 
 
  function indexDocumentFromDb(ns, target, _id) {
-  // logWithDate('Indexing using mongo record');
-  
+
+   logWithDate('Indexing Document From DB - Using collection as source');
+
    return new Promise(
-    function(resolve, reject) {
+     function(resolve, reject) {
        getOriginalDocument(ns, _id).then(
-           function(doc) {
-             index(ns, target, _id, doc).then(resolve);
-           })
+         function(doc) {
+           index(ns, target, _id, doc).then(function() {
+             resolve();
+           });
+         })
      })
  }
- /**
-  * [set description]
-  * @param {[type]} ns     [description]
-  * @param {[type]} target [description]
-  * @param {[type]} _id    [description]
-  * @param {[type]} o      [description]
-  */
- function set(ns, target, _id, o) {
 
+ function set(ns, target, _id, o) {
    return new Promise(function(resolve, reject) {
      var setFunction = function(_target) {
        var partial = o['$set'];
@@ -210,14 +179,6 @@
  }
 
 
- /**
-  * [unset description]
-  * @param  {[type]} ns     [description]
-  * @param  {[type]} target [description]
-  * @param  {[type]} _id    [description]
-  * @param  {[type]} o      [description]
-  * @return {[type]}        [description]
-  */
  function unset(ns, target, _id, o) {
    return new Promise(function(resolve, reject) {
      var unSetFunction = function() {
@@ -261,13 +222,6 @@
 
 
 
- /**
-  * [remove description]
-  * @param  {[type]} ns     [description]
-  * @param  {[type]} target [description]
-  * @param  {[type]} _id    [description]
-  * @return {[type]}        [description]
-  */
  function remove(ns, target, _id) {
    return new Promise(function(resolve, reject) {
      client.delete(_.assign({
@@ -280,12 +234,7 @@
  }
 
 
- /**
-  * [getTarget description]
-  * @param  {[type]} ns       [description]
-  * @param  {[type]} document [description]
-  * @return {[type]}          [description]
-  */
+
  function getTarget(ns, doc) {
    var target = conf.ns_mapping[ns];
    if (target) {
@@ -305,7 +254,7 @@
  }
 
  function getOriginalDocument(ns, _id) {
-  logWithDate('Getting document from collection');
+   logWithDate('Getting document from collection');
    return new Promise(function(resolve, reject) {
      var server = new Server(conf.mongo.host, conf.mongo.port); //TODO extract url from conf
      var db = ns.split('.')[0];
@@ -332,13 +281,7 @@
 
      });
    });
-
-
-
  }
-
-
-
 
  //elastic search changes will be called syncrhonically 
  function addToQueue(fn) {
@@ -349,7 +292,7 @@
          task.done();
        })
      }.bind(this);
-     
+
      queue.push(job);
 
    } else {
@@ -363,25 +306,27 @@
  }
 
 
-
  oplog.on('op', function(data) {
-   //   logWithDate('Last ts id' + data.ns + '- ts ' + data.ts);
+   logWithDate('Last ts  readed for' + data.ns + 'is ' + data.ts);
  });
 
 
  oplog.on('insert', function(doc) {
+   logWithDate('Got insert event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      addToQueue(function() {
        return index(doc.ns, target, parse_id(doc), doc.o)
      });
    } else {
-     console.log("Wasn't able to get target");
+     logWithDate('nothing to do with ' + doc.ns);
    }
  });
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
+   logWithDate('Got update event');
+
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      if (doc.o['$set']) { //SET VALUE
@@ -408,6 +353,8 @@
 
 
  oplog.on('delete', function(doc) {
+   logWithDate('Got delete event');
+
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      addToQueue(function() {
@@ -423,9 +370,9 @@
  });
 
  oplog.on('end', function() {
-   logWithDate('nothing more to do');
+   logWithDate('Got end event!');
  });
 
  oplog.stop(function() {
-   logWithDate('Stopping');
+   logWithDate('Got stop event!');
  });
