@@ -75,7 +75,7 @@
 
  function handleResponse(ns, action, _id, error, response) {
    if (error) {
-     logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + _id);
+     logWithDate('ERROR: - ' + ns + ' - ' + action + ' - ' + error + ' - ' + _id);
    } else {
      counter++;
      logWithDate(ns + ' - ' + action + ' - ' + ' - ' + _id + ' - ' + counter);
@@ -131,8 +131,17 @@
  }
 
  function set(ns, target, _id, o) {
+
+
    return new Promise(function(resolve, reject) {
+
      var setFunction = function(_target) {
+        debugger;
+       indexDocumentFromDb(ns, target, _id).then(function() {
+         resolve();
+       });
+       
+       /*debugger;
        var partial = o['$set'];
        var body = {};
        target = target || _target;
@@ -158,8 +167,9 @@
            }
            resolve();
          }
-       );
+       );*/
      };
+
 
      if (target._parent && !target.routing) { //if routing is not present I should get the routing from the orginal document
        var document = getOriginalDocument(ns, _id).then(
