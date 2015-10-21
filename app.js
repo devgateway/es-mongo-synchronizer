@@ -331,10 +331,10 @@
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
-  /* //logWithDate('Got update event');
+   //logWithDate('Got update event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
-     if (doc.o['$set']) { //SET VALUE
+  /*   if (doc.o['$set']) { //SET VALUE
        addToQueue(function() {
          return set(doc.ns, target, parse_id(doc), doc.o)
        });
