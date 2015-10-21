@@ -136,7 +136,6 @@
    return new Promise(function(resolve, reject) {
 
      var setFunction = function(_target) {
-        debugger;
        indexDocumentFromDb(ns, target, _id).then(function() {
          resolve();
        });
@@ -332,7 +331,7 @@
 
  /*Handle Updates*/
  oplog.on('update', function(doc) {
-   //logWithDate('Got update event');
+  /* //logWithDate('Got update event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
      if (doc.o['$set']) { //SET VALUE
@@ -351,6 +350,9 @@
          return update(doc.ns, target, parse_id(doc), doc.o)
        });
      }
+*/
+    indexDocumentFromDb(doc.ns, target, parse_id(doc)).then(function() {});
+
 
    } else {
      logWithDate('nothing to do with ' + doc.ns);
