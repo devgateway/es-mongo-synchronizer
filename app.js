@@ -334,7 +334,7 @@
    //logWithDate('Got update event');
    var target = getTarget(doc.ns, doc.o);
    if (target) {
-  /*   if (doc.o['$set']) { //SET VALUE
+     if (doc.o['$set']) { //SET VALUE
        addToQueue(function() {
          return set(doc.ns, target, parse_id(doc), doc.o)
        });
@@ -350,8 +350,8 @@
          return update(doc.ns, target, parse_id(doc), doc.o)
        });
      }
-*/
-    indexDocumentFromDb(doc.ns, target, parse_id(doc)).then(function() {});
+
+   // indexDocumentFromDb(doc.ns, target, parse_id(doc)).then(function() {});
 
 
    } else {
